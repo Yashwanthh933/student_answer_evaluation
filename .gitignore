@@ -1,0 +1,7 @@
+target/
+.idea/
+.DS_Store
+AGENTS.md
+DECISIONS.md
+SCOPE.md
+
