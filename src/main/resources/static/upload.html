@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Scanner — Answer Script App</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #17212b;
+            background: #f3f6f8;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+        }
+
+        main {
+            width: min(34rem, calc(100% - 3rem));
+            padding: 2rem;
+            border: 1px solid #dbe3e8;
+            border-radius: 1rem;
+            background: #fff;
+            box-shadow: 0 1rem 3rem #17212b12;
+        }
+
+        .eyebrow {
+            color: #526575;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        h1 { margin: 0.5rem 0; font-size: 1.75rem; }
+        p { color: #526575; line-height: 1.5; }
+        label { display: block; margin: 1.25rem 0 0.5rem; font-weight: 600; }
+        input { display: block; max-width: 100%; margin-bottom: 0.75rem; }
+        #insert-position { width: 5rem; }
+        button { padding: 0.65rem 1rem; border: 0; border-radius: 0.5rem; color: white; background: #1459a6; font: inherit; font-weight: 600; }
+        button:disabled { background: #9aa9b5; }
+        h2 { margin-top: 1.75rem; font-size: 1rem; }
+        li { padding: 0.3rem 0; }
+        .page-item { display: flex; align-items: center; gap: 0.75rem; }
+        .page-preview { width: 3rem; height: 4rem; object-fit: contain; border: 1px solid #dbe3e8; border-radius: 0.25rem; background: #f3f6f8; }
+        #upload-status { min-height: 1.5rem; }
+    </style>
+</head>
+<body>
+<main>
+    <p class="eyebrow">Scanner workspace</p>
+    <h1>Add answer-script pages</h1>
+    <p><a href="/change-password.html">Change password</a></p>
+    <p><a href="/submissions.html">View submitted scripts</a> · <a href="/browse.html">Browse by branch and year</a></p>
+    <label for="exam-select">Choose an open exam</label>
+    <select id="exam-select" required>
+        <option value="">Loading open exams…</option>
+    </select>
+    <p>Add JPEG or PNG pages one at a time from files or your phone camera. Choose where each page belongs; pages after that position move down.</p>
+    <label for="page-file">Choose a page image</label>
+    <input id="page-file" type="file" accept="image/jpeg,image/png">
+    <label for="insert-position">Insert at page number</label>
+    <input id="insert-position" type="number" min="1" value="1" step="1">
+    <button id="add-page" type="button">Add page</button>
+    <button id="capture-page" type="button">Capture page with camera</button>
+    <input id="camera-file" type="file" accept="image/jpeg,image/png" capture="environment" hidden>
+    <p>On supported phones, camera capture uses the rear camera and adds the image at the selected page number.</p>
+
+    <section aria-live="polite">
+        <h2>Pages added</h2>
+        <ol id="page-list"></ol>
+        <p id="empty-list">No pages added yet.</p>
+    </section>
+    <button id="submit-pages" type="button" disabled>Submit all pages</button>
+    <p id="upload-status" role="status" aria-live="polite"></p>
+</main>
+<script>
+    const pageFile = document.querySelector("#page-file");
+    const cameraFile = document.querySelector("#camera-file");
+    const insertPosition = document.querySelector("#insert-position");
+    const pageList = document.querySelector("#page-list");
+    const emptyList = document.querySelector("#empty-list");
+    const addPageButton = document.querySelector("#add-page");
+    const capturePageButton = document.querySelector("#capture-page");
+    const submitButton = document.querySelector("#submit-pages");
+    const examSelect = document.querySelector("#exam-select");
+    const status = document.querySelector("#upload-status");
+    const pages = [];
+    let uploading = false;
+
+    async function loadOpenExams(preferredExamId = examSelect.value) {
+        try {
+            const response = await fetch("/api/submissions/open-exams", { cache: "no-store" });
+            if (!response.ok) throw new Error(`Could not load open exams (HTTP ${response.status}).`);
+            const exams = await response.json();
+            examSelect.replaceChildren();
+            const choose = document.createElement("option");
+            choose.value = "";
+            choose.textContent = exams.length ? "Choose an open exam" : "No open exams available";
+            examSelect.append(choose);
+            for (const exam of exams) {
+                const option = document.createElement("option");
+                option.value = exam.id;
+                option.textContent = `${exam.name} · ${exam.subjectName} · ${exam.branch} year ${exam.year}`;
+                examSelect.append(option);
+            }
+            if (preferredExamId && exams.some(exam => exam.id === preferredExamId)) {
+                examSelect.value = preferredExamId;
+            }
+            status.textContent = exams.length ? "" : "An Exam Controller must open an exam before scanning.";
+        } catch (error) {
+            examSelect.replaceChildren();
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = "Could not load open exams";
+            examSelect.append(option);
+            status.textContent = error.message;
+        }
+        renderPages();
+    }
+
+    function createFilePartName() {
+        // randomUUID requires HTTPS; scanners can reach the app over local Wi-Fi HTTP.
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        const suffix = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+        return `image-${suffix}`;
+    }
+
+    function renderPages() {
+        pageList.replaceChildren();
+        pages.forEach((page) => {
+            const item = document.createElement("li");
+            item.className = "page-item";
+            const number = document.createElement("strong");
+            number.textContent = `Page ${page.pageNumber}`;
+            const preview = document.createElement("img");
+            preview.className = "page-preview";
+            preview.src = page.previewUrl;
+            preview.alt = `Preview of page ${page.pageNumber}`;
+            item.append(number, preview);
+            pageList.append(item);
+        });
+        emptyList.hidden = pages.length > 0;
+        addPageButton.disabled = !examSelect.value || uploading;
+        capturePageButton.disabled = !examSelect.value || uploading;
+        pageFile.disabled = !examSelect.value || uploading;
+        insertPosition.disabled = !examSelect.value || uploading;
+        examSelect.disabled = uploading;
+        submitButton.disabled = pages.length === 0 || !examSelect.value || uploading;
+        insertPosition.max = String(pages.length + 1);
+    }
+
+    function addPage(file) {
+        if (!examSelect.value) {
+            status.textContent = "Choose an open exam before adding pages.";
+            return;
+        }
+        if (!file) {
+            status.textContent = "Choose or capture an image before adding a page.";
+            return;
+        }
+        if (file.size > 15 * 1024 * 1024) {
+            status.textContent = "Each image must be 15 MB or smaller.";
+            return;
+        }
+
+        const pageNumber = Number(insertPosition.value);
+        if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > pages.length + 1) {
+            status.textContent = `Choose a page number from 1 to ${pages.length + 1}.`;
+            return;
+        }
+
+        pages.splice(pageNumber - 1, 0, {
+            pageNumber,
+            file,
+            previewUrl: URL.createObjectURL(file)
+        });
+        pages.forEach((page, index) => {
+            page.pageNumber = index + 1;
+        });
+        pageFile.value = "";
+        insertPosition.value = String(pages.length + 1);
+        status.textContent = "";
+        renderPages();
+    }
+
+    addPageButton.addEventListener("click", () => {
+        addPage(pageFile.files[0]);
+    });
+
+    capturePageButton.addEventListener("click", () => {
+        cameraFile.click();
+    });
+
+    examSelect.addEventListener("change", () => {
+        if (pages.length > 0) {
+            status.textContent = "The selected exam will be used for all queued pages.";
+        }
+        renderPages();
+    });
+
+    cameraFile.addEventListener("change", () => {
+        const file = cameraFile.files[0];
+        cameraFile.value = "";
+        if (file) {
+            addPage(file);
+        }
+    });
+
+    submitButton.addEventListener("click", async () => {
+        if (!examSelect.value) {
+            status.textContent = "Choose an open exam before submitting pages.";
+            return;
+        }
+        uploading = true;
+        renderPages();
+        status.textContent = "Uploading pages…";
+
+        try {
+            const csrfResponse = await fetch("/csrf", { cache: "no-store" });
+            if (!csrfResponse.ok) {
+                throw new Error("Could not prepare the secure upload.");
+            }
+
+            const csrf = await csrfResponse.json();
+            const formData = new FormData();
+            const manifest = pages.map((page) => {
+                const filePart = createFilePartName();
+                formData.append(filePart, page.file);
+                return { filePart, pageNumber: page.pageNumber };
+            });
+            formData.append("manifest", new Blob([JSON.stringify({ examId: examSelect.value, pages: manifest })], {
+                type: "application/json"
+            }), "manifest.json");
+
+            const response = await fetch("/api/submissions", {
+                method: "POST",
+                headers: { [csrf.headerName]: csrf.token },
+                body: formData
+            });
+            const responseText = await response.text();
+            let result = {};
+            try {
+                result = JSON.parse(responseText);
+            } catch (error) {
+                // Keep the HTTP status below when the server returns a non-JSON error page.
+            }
+
+            if (!response.ok) {
+                const serverMessage = result.detail || result.message || result.error;
+                const message = serverMessage || response.statusText || "Unknown upload error";
+                if (response.status === 409) await loadOpenExams(examSelect.value);
+                throw new Error(`${message} (HTTP ${response.status}).`);
+            }
+            if (!result.submissionId || !Number.isInteger(result.pageCount)) {
+                throw new Error("The server did not return a submission receipt. Sign in again and retry.");
+            }
+
+            const examLabel = examSelect.selectedOptions[0]?.textContent || "Selected exam";
+            status.textContent = `${result.pageCount} pages saved for ${examLabel}. Submission ID: ${result.submissionId}`;
+            pages.forEach((page) => URL.revokeObjectURL(page.previewUrl));
+            pages.length = 0;
+            renderPages();
+        } catch (error) {
+            status.textContent = error.message;
+        } finally {
+            uploading = false;
+            renderPages();
+        }
+    });
+
+    loadOpenExams();
+</script>
+</body>
+</html>

@@ -1,7 +1,15 @@
 target/
+storage/
 .idea/
 .DS_Store
 AGENTS.md
 DECISIONS.md
 SCOPE.md
+api_key.md
+architecture.md
+gemini_api_key.md
+module-2.md
+module-3.md
+module-4.md
+module-5.md
 

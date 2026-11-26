@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Browse submissions — Answer Script App</title>
+    <style>
+        * { box-sizing: border-box; }
+        :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #17212b; background: #f3f6f8; }
+        body { margin: 0; padding: 1.5rem 1rem; }
+        main { width: min(70rem, 100%); margin: 0 auto; }
+        header, section { margin-bottom: 1rem; padding: 1.5rem; border: 1px solid #dbe3e8; border-radius: 1rem; background: #fff; box-shadow: 0 1rem 3rem #17212b0a; }
+        .eyebrow { margin: 0; color: #526575; font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        h1 { margin: .4rem 0; font-size: 1.8rem; }
+        h2 { margin: 0; font-size: 1.2rem; }
+        h3 { margin: 1rem 0 .5rem; font-size: 1rem; }
+        p, small { color: #526575; line-height: 1.5; }
+        a { color: #1459a6; }
+        nav { margin-top: 1rem; }
+        .branch { border-top: 1px solid #dbe3e8; padding: 1rem 0; }
+        .branch:first-child { border-top: 0; }
+        .year { margin: .75rem 0 .75rem 1rem; padding: .25rem 0 .25rem 1rem; border-left: 2px solid #dbe3e8; }
+        .exam-list { display: grid; gap: .4rem; margin-left: 1rem; }
+        .exam { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem .7rem; border: 1px solid #dbe3e8; border-radius: .5rem; }
+        .count { color: #526575; white-space: nowrap; }
+        #browse-status { min-height: 1.5rem; }
+        .error { color: #b42318; }
+        @media (max-width: 34rem) { header, section { padding: 1rem; } .exam { display: grid; gap: .15rem; } }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <p class="eyebrow">Submission browser</p>
+        <h1>Browse by branch and year</h1>
+        <p>Select a branch, year, or exam to open the submissions list with that filter applied.</p>
+        <nav><a href="/submissions.html">All submissions</a> · <a href="/change-password.html">Change password</a> · <a href="/">Home</a></nav>
+    </header>
+    <section>
+        <p id="browse-status" role="status" aria-live="polite">Loading exam groups…</p>
+        <div id="browse-tree"></div>
+    </section>
+</main>
+<script>
+    const status = document.querySelector("#browse-status");
+    const tree = document.querySelector("#browse-tree");
+
+    function text(parent, tag, value, className) {
+        const node = document.createElement(tag);
+        node.textContent = value;
+        if (className) node.className = className;
+        parent.append(node);
+        return node;
+    }
+
+    function filteredLink(filters) {
+        const query = new URLSearchParams(filters);
+        return `/submissions.html?${query}`;
+    }
+
+    function render(groups) {
+        tree.replaceChildren();
+        if (!groups.length) {
+            status.textContent = "No submissions to browse yet.";
+            return;
+        }
+
+        const branches = new Map();
+        for (const exam of groups) {
+            if (!branches.has(exam.branch)) branches.set(exam.branch, new Map());
+            const years = branches.get(exam.branch);
+            if (!years.has(exam.year)) years.set(exam.year, []);
+            years.get(exam.year).push(exam);
+        }
+
+        status.textContent = "Choose a branch, year, or exam to see its submissions.";
+        for (const [branchName, years] of branches) {
+            const branchSection = document.createElement("section");
+            branchSection.className = "branch";
+            const branchCount = [...years.values()].flat().reduce((sum, exam) => sum + exam.submissionCount, 0);
+            const branchHeading = document.createElement("h2");
+            const branchLink = document.createElement("a");
+            branchLink.href = filteredLink({ branch: branchName });
+            branchLink.textContent = branchName;
+            branchHeading.append(branchLink);
+            branchSection.append(branchHeading);
+            text(branchSection, "small", `${branchCount} submission${branchCount === 1 ? "" : "s"}`);
+
+            for (const [year, exams] of years) {
+                const yearSection = document.createElement("div");
+                yearSection.className = "year";
+                const yearCount = exams.reduce((sum, exam) => sum + exam.submissionCount, 0);
+                const yearHeading = document.createElement("h3");
+                const yearLink = document.createElement("a");
+                yearLink.href = filteredLink({ branch: branchName, year });
+                yearLink.textContent = `Year ${year}`;
+                yearHeading.append(yearLink);
+                yearSection.append(yearHeading);
+                text(yearSection, "small", `${yearCount} submission${yearCount === 1 ? "" : "s"}`);
+
+                const examList = document.createElement("div");
+                examList.className = "exam-list";
+                for (const exam of exams) {
+                    const examRow = document.createElement("div");
+                    examRow.className = "exam";
+                    const link = document.createElement("a");
+                    link.href = filteredLink({ examId: exam.examId });
+                    link.textContent = `${exam.examName} · ${exam.subjectName}`;
+                    const count = document.createElement("span");
+                    count.className = "count";
+                    count.textContent = `${exam.submissionCount} submission${exam.submissionCount === 1 ? "" : "s"}`;
+                    examRow.append(link, count);
+                    examList.append(examRow);
+                }
+                yearSection.append(examList);
+                branchSection.append(yearSection);
+            }
+            tree.append(branchSection);
+        }
+    }
+
+    fetch("/api/submission-browser/browse", { cache: "no-store" })
+        .then(response => {
+            if (!response.ok) throw new Error(`Could not load Browse (HTTP ${response.status}).`);
+            return response.json();
+        })
+        .then(result => render(result.groups))
+        .catch(error => { status.textContent = error.message; status.className = "error"; });
+</script>
+</body>
+</html>

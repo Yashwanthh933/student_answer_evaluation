@@ -52,6 +52,7 @@
         [data-status="UP"] { color: #16734a; }
         [data-status="DOWN"], .error { color: #b42318; }
         a { color: #1459a6; }
+        .scanner-link { display: inline-block; margin-top: 0.5rem; font-weight: 700; }
         #message { min-height: 1.25rem; color: #526575; font-size: 0.9rem; }
     </style>
 </head>
@@ -67,6 +68,12 @@
     </dl>
     <p id="message" role="status">Loading health status…</p>
     <a href="/actuator/health">View health details</a>
+    <br>
+    <a class="scanner-link" href="/upload.html">Scanner sign in</a>
+    <br>
+    <a class="scanner-link" href="/question-paper.html">Exam Controller sign in</a>
+    <br>
+    <a class="scanner-link" href="/settings.html">Super Admin sign in</a>
 </main>
 <script>
     async function showHealth() {

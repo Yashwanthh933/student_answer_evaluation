@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Exams — Answer Script App</title>
+    <style>
+        :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #17212b; background: #f3f6f8; }
+        body { margin: 0; padding: 1.5rem 1rem; }
+        main { width: min(76rem, 100% - 2rem); margin: 0 auto; }
+        header, section { margin-bottom: 1rem; padding: 1.5rem; border: 1px solid #dbe3e8; border-radius: 1rem; background: #fff; box-shadow: 0 1rem 3rem #17212b0a; }
+        .eyebrow { margin: 0; color: #526575; font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        h1 { margin: .4rem 0; font-size: 1.8rem; } h2 { margin-top: 0; font-size: 1.25rem; }
+        p, small { color: #526575; line-height: 1.5; } a { color: #1459a6; } nav { margin-top: 1rem; }
+        form#create-exam { display: grid; grid-template-columns: repeat(3, minmax(10rem, 1fr)); gap: .2rem 1rem; }
+        label { display: block; margin: .6rem 0 .3rem; font-weight: 600; }
+        input, select { box-sizing: border-box; width: 100%; padding: .55rem; font: inherit; }
+        button { padding: .55rem .8rem; border: 0; border-radius: .4rem; background: #1459a6; color: white; font: inherit; font-weight: 650; cursor: pointer; }
+        button:disabled { opacity: .6; cursor: wait; }
+        #create-exam button { justify-self: start; margin-top: 1rem; }
+        .exam-list { display: grid; gap: 1rem; }
+        .exam-card { padding: 1rem; border: 1px solid #dbe3e8; border-radius: .7rem; }
+        .exam-fields { display: grid; grid-template-columns: repeat(4, minmax(9rem, 1fr)); gap: .2rem .8rem; }
+        .exam-actions { display: flex; align-items: center; gap: .8rem; margin-top: .8rem; }
+        .error { color: #b42318 !important; } .success { color: #16734a !important; }
+        @media (max-width: 48rem) { form#create-exam, .exam-fields { grid-template-columns: repeat(2, minmax(8rem, 1fr)); } }
+        @media (max-width: 32rem) { header, section { padding: 1rem; } form#create-exam, .exam-fields { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <p class="eyebrow">Phase 20 · Exam Controller and Super Admin</p>
+        <h1>Exams</h1>
+        <p>Create an exam for one branch and year. Exams can be edited, closed, and reopened, but not deleted.</p>
+        <nav><a href="/submissions.html">Submissions</a> · <a href="/browse.html">Browse</a> · <a href="/question-paper.html">Question papers</a> · <a href="/rubric.html">Rubrics</a> · <a href="/change-password.html">Change password</a> · <a href="/">Home</a></nav>
+    </header>
+    <section>
+        <h2>Create an exam</h2>
+        <form id="create-exam">
+            <div><label for="name">Exam name</label><input id="name" maxlength="200" required placeholder="Mid Term 1"></div>
+            <div><label for="subjectName">Subject name</label><input id="subjectName" maxlength="200" required placeholder="DBMS"></div>
+            <div><label for="courseCode">Course code (optional)</label><input id="courseCode" maxlength="80"></div>
+            <div><label for="branch">Branch</label><select id="branch" required></select></div>
+            <div><label for="year">Year</label><select id="year" required></select></div>
+            <div><label for="examDate">Exam date</label><input id="examDate" type="date" required></div>
+            <button type="submit">Create exam</button>
+        </form>
+        <p id="create-message" role="status" aria-live="polite"></p>
+    </section>
+    <section>
+        <h2>Exam list</h2>
+        <p id="list-message" role="status" aria-live="polite">Loading exams…</p>
+        <div id="exam-list" class="exam-list"></div>
+    </section>
+</main>
+<script>
+    const createForm = document.querySelector("#create-exam");
+    const createMessage = document.querySelector("#create-message");
+    const listMessage = document.querySelector("#list-message");
+    const examList = document.querySelector("#exam-list");
+    let referenceData;
+
+    function text(parent, tag, value, className) {
+        const node = document.createElement(tag);
+        node.textContent = value;
+        if (className) node.className = className;
+        parent.append(node);
+        return node;
+    }
+
+    async function request(url, options = {}) {
+        const response = await fetch(url, { cache: "no-store", ...options });
+        if (!response.ok) {
+            let message = `Request failed (HTTP ${response.status}).`;
+            try { const body = await response.json(); message = body.detail || body.message || message; } catch (error) { }
+            throw new Error(message);
+        }
+        return response.status === 204 ? null : response.json();
+    }
+
+    async function postOrPut(url, method, body) {
+        const csrf = await request("/csrf");
+        return request(url, {
+            method,
+            headers: { "Content-Type": "application/json", [csrf.headerName]: csrf.token },
+            body: JSON.stringify(body)
+        });
+    }
+
+    function selectOptions(select, values, selected) {
+        select.replaceChildren();
+        for (const value of values) {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            option.selected = String(value) === String(selected);
+            select.append(option);
+        }
+    }
+
+    function field(parent, labelText, type, key, value, values, suffix) {
+        const wrapper = document.createElement("div");
+        const label = text(wrapper, "label", labelText);
+        const control = type === "select" ? document.createElement("select") : document.createElement("input");
+        control.name = key;
+        if (type !== "select") control.type = type;
+        label.htmlFor = `field-${key}-${suffix}`;
+        control.id = `field-${key}-${suffix}`;
+        if (type === "select") selectOptions(control, values, value);
+        else control.value = value ?? "";
+        if (type === "text" && key !== "courseCode") control.required = true;
+        if (key === "name" || key === "subjectName") control.maxLength = 200;
+        if (key === "courseCode") control.maxLength = 80;
+        wrapper.append(control);
+        parent.append(wrapper);
+        return control;
+    }
+
+    async function loadExams() {
+        listMessage.textContent = "Loading exams…";
+        examList.replaceChildren();
+        try {
+            const exams = await request("/api/exams");
+            listMessage.textContent = exams.length ? "Edit an exam below and save its changes." : "No exams have been created.";
+            for (const exam of exams) {
+                const card = document.createElement("article");
+                card.className = "exam-card";
+                const form = document.createElement("form");
+                const fields = document.createElement("div");
+                fields.className = "exam-fields";
+                form.append(fields);
+                const controls = {
+                    name: field(fields, "Exam name", "text", "name", exam.name, null, exam.id),
+                    subjectName: field(fields, "Subject name", "text", "subjectName", exam.subjectName, null, exam.id),
+                    courseCode: field(fields, "Course code", "text", "courseCode", exam.courseCode, null, exam.id),
+                    branch: field(fields, "Branch", "select", "branch", exam.branch, referenceData.branches, exam.id),
+                    year: field(fields, "Year", "select", "year", exam.year, referenceData.years, exam.id),
+                    examDate: field(fields, "Exam date", "date", "examDate", exam.examDate, null, exam.id),
+                    status: field(fields, "Status", "select", "status", exam.status, ["OPEN", "CLOSED"], exam.id)
+                };
+                const actions = document.createElement("div");
+                actions.className = "exam-actions";
+                const save = text(actions, "button", "Save changes");
+                save.type = "submit";
+                text(actions, "small", `Created by ${exam.createdByUsername} · ${new Date(exam.createdAt).toLocaleString()}`);
+                form.append(actions);
+                form.addEventListener("submit", async event => {
+                    event.preventDefault();
+                    save.disabled = true;
+                    try {
+                        await postOrPut(`/api/exams/${exam.id}`, "PUT", {
+                            name: controls.name.value, subjectName: controls.subjectName.value,
+                            courseCode: controls.courseCode.value, branch: controls.branch.value,
+                            year: Number(controls.year.value), examDate: controls.examDate.value, status: controls.status.value
+                        });
+                        listMessage.textContent = "Exam saved.";
+                        listMessage.className = "success";
+                        await loadExams();
+                    } catch (error) {
+                        listMessage.textContent = error.message;
+                        listMessage.className = "error";
+                    } finally { save.disabled = false; }
+                });
+                card.append(form);
+                examList.append(card);
+            }
+        } catch (error) {
+            listMessage.textContent = error.message;
+            listMessage.className = "error";
+        }
+    }
+
+    async function start() {
+        try {
+            referenceData = await request("/api/exams/reference-data");
+            selectOptions(document.querySelector("#branch"), referenceData.branches);
+            selectOptions(document.querySelector("#year"), referenceData.years);
+            await loadExams();
+        } catch (error) {
+            listMessage.textContent = error.message;
+            listMessage.className = "error";
+            createForm.querySelector("button").disabled = true;
+        }
+    }
+
+    createForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        const button = createForm.querySelector("button");
+        button.disabled = true;
+        createMessage.textContent = "Saving exam…";
+        try {
+            await postOrPut("/api/exams", "POST", {
+                name: document.querySelector("#name").value,
+                subjectName: document.querySelector("#subjectName").value,
+                courseCode: document.querySelector("#courseCode").value,
+                branch: document.querySelector("#branch").value,
+                year: Number(document.querySelector("#year").value),
+                examDate: document.querySelector("#examDate").value,
+                status: "OPEN"
+            });
+            createForm.reset();
+            createMessage.textContent = "Exam created.";
+            createMessage.className = "success";
+            await loadExams();
+        } catch (error) {
+            createMessage.textContent = error.message;
+            createMessage.className = "error";
+        } finally { button.disabled = false; }
+    });
+
+    start();
+</script>
+</body>
+</html>

@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Read and mark answer scripts — Answer Script App</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #17212b;
+            background: #f3f6f8;
+        }
+        body { margin: 0; padding: 1.5rem 1rem; }
+        main { width: min(76rem, 100% - 2rem); margin: 0 auto; }
+        header, .panel {
+            padding: 1.5rem;
+            border: 1px solid #dbe3e8;
+            border-radius: 1rem;
+            background: #fff;
+            box-shadow: 0 1rem 3rem #17212b0a;
+        }
+        header { margin-bottom: 1rem; }
+        .eyebrow { margin: 0; color: #526575; font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        h1 { margin: .4rem 0; font-size: 1.8rem; }
+        h2 { margin-top: 0; font-size: 1.25rem; }
+        .intro, .subtle { color: #526575; line-height: 1.5; }
+        nav { margin-top: 1rem; }
+        a { color: #1459a6; }
+        .layout { display: grid; grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr); gap: 1rem; align-items: start; }
+        #submissions { display: grid; gap: .5rem; }
+        .submission-choice { width: 100%; padding: .8rem; border: 1px solid #dbe3e8; border-radius: .55rem; background: #fff; color: #17212b; text-align: left; font: inherit; cursor: pointer; }
+        .submission-choice[aria-current="true"] { border-color: #1459a6; background: #eef5fc; }
+        .submission-choice small { display: block; margin-top: .25rem; color: #526575; }
+        .review-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+        .page { margin-bottom: 1rem; }
+        .page img { display: block; width: 100%; height: auto; border: 1px solid #dbe3e8; border-radius: .5rem; }
+        .page h3, .answer h3 { margin: .5rem 0; font-size: 1rem; }
+        .answer { padding: .75rem 0; border-top: 1px solid #e8edf0; }
+        .answer p { margin: 0; white-space: pre-wrap; line-height: 1.55; }
+        #run-history { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 1rem; }
+        .run-choice { padding: .5rem .65rem; border: 1px solid #dbe3e8; border-radius: .45rem; background: white; color: #17212b; font: inherit; text-align: left; cursor: pointer; }
+        .run-choice[aria-current="true"], .marking-run-choice[aria-current="true"] { border-color: #1459a6; background: #eef5fc; }
+        .run-choice small, .marking-run-choice small { display: block; margin-top: .2rem; color: #526575; }
+        #marking-history { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+        .marking-run-choice { padding: .5rem .65rem; border: 1px solid #dbe3e8; border-radius: .45rem; background: white; color: #17212b; font: inherit; text-align: left; cursor: pointer; }
+        .marking-inputs { margin: 1rem 0; padding: 1rem; border: 1px solid #dbe3e8; border-radius: .75rem; background: #fbfcfd; }
+        .marking-inputs h3 { margin: .5rem 0; font-size: 1rem; }
+        .marking-answer { padding: .65rem 0; border-top: 1px solid #e8edf0; }
+        .marking-answer p { margin: 0; white-space: pre-wrap; line-height: 1.5; }
+        #question-paper-select { display: block; width: min(34rem, 100%); margin-top: .5rem; padding: .65rem; font: inherit; }
+        button.read { margin: 0 0 1rem; padding: .7rem 1rem; border: 0; border-radius: .5rem; background: #1459a6; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+        #mark-answers, #mark-with-rubric { margin-top: .75rem; }
+        #marking-result { margin-top: 1rem; }
+        #marking-result table { width: 100%; border-collapse: collapse; }
+        #marking-result th, #marking-result td { padding: .6rem; border: 1px solid #dbe3e8; text-align: left; vertical-align: top; }
+        #marking-result th { background: #f3f6f8; }
+        #marking-result .over-maximum { background: #fff1ef; color: #8e1d14; }
+        #marking-result .over-maximum td:first-child::after { content: " · above maximum"; font-weight: 700; }
+        #marking-result .unassigned { margin-top: 1rem; }
+        #marking-result details { margin: 0 0 1rem; }
+        #marking-result pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+        button:disabled { opacity: .6; cursor: wait; }
+        #message, #run-status { min-height: 1.4rem; color: #526575; }
+        .error { color: #b42318 !important; }
+        .success { color: #16734a !important; }
+        [hidden] { display: none !important; }
+        @media (max-width: 52rem) { .layout { grid-template-columns: 1fr; } }
+        @media (max-width: 36rem) { .review-grid { grid-template-columns: 1fr; } header, .panel { padding: 1rem; } }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <p class="eyebrow">Super Admin · Phase 15</p>
+        <h1>Read and mark submitted scripts</h1>
+        <p class="intro">Choose a submission to review its pages in saved order. Reading sends all pages together to the selected model.</p>
+        <nav><a href="/settings.html">Model settings</a> · <a href="/rubric.html">Rubrics</a> · <a href="/users.html">Manage users</a> · <a href="/change-password.html">Change password</a> · <a href="/">Home</a></nav>
+    </header>
+    <div class="layout">
+        <section class="panel" aria-labelledby="submissions-title">
+            <h2 id="submissions-title">Submissions</h2>
+            <div id="submissions" aria-live="polite">Loading submissions…</div>
+        </section>
+        <section id="review" class="panel" aria-live="polite">
+            <p id="message">Choose a submission to see its pages.</p>
+            <div id="review-content" hidden>
+                <h2 id="submission-title"></h2>
+                <button id="read-pages" class="read" type="button">Read pages</button>
+                <p id="run-status" role="status"></p>
+                <section id="run-history-box" aria-label="Previous readings" hidden>
+                    <h3>Previous readings</h3>
+                    <div id="run-history"></div>
+                </section>
+                <section id="marking-inputs" class="marking-inputs" aria-labelledby="marking-title" hidden>
+                    <h2 id="marking-title">Mark answers</h2>
+                    <div id="marking-reading"></div>
+                    <div id="marking-paper"></div>
+                    <button id="mark-answers" class="read" type="button" hidden disabled>Mark answers</button>
+                    <button id="mark-with-rubric" class="read" type="button" hidden disabled>Mark with rubric</button>
+                    <p id="marking-rubric-status" class="subtle" role="status"></p>
+                    <p id="marking-status" role="status"></p>
+                    <section id="marking-history-box" aria-label="Previous marking runs" hidden>
+                        <h3>Previous marking runs</h3>
+                        <div id="marking-history"></div>
+                    </section>
+                    <section id="marking-result" aria-label="Marking result" hidden></section>
+                </section>
+                <div class="review-grid">
+                    <section aria-label="Submission pages">
+                        <h2>Pages</h2>
+                        <div id="pages"></div>
+                    </section>
+                    <section aria-label="Transcription">
+                        <h2>Transcribed answers</h2>
+                        <div id="answers"></div>
+                    </section>
+                </div>
+            </div>
+        </section>
+    </div>
+</main>
+<script>
+    const submissionsElement = document.querySelector("#submissions");
+    const messageElement = document.querySelector("#message");
+    const reviewContent = document.querySelector("#review-content");
+    const runButton = document.querySelector("#read-pages");
+    const runStatus = document.querySelector("#run-status");
+    const answersElement = document.querySelector("#answers");
+    const runHistoryBox = document.querySelector("#run-history-box");
+    const runHistoryElement = document.querySelector("#run-history");
+    const markingInputsElement = document.querySelector("#marking-inputs");
+    const markingReadingElement = document.querySelector("#marking-reading");
+    const markingPaperElement = document.querySelector("#marking-paper");
+    const markButton = document.querySelector("#mark-answers");
+    const markWithRubricButton = document.querySelector("#mark-with-rubric");
+    const markingRubricStatus = document.querySelector("#marking-rubric-status");
+    const markingStatus = document.querySelector("#marking-status");
+    const markingHistoryBox = document.querySelector("#marking-history-box");
+    const markingHistory = document.querySelector("#marking-history");
+    const markingResult = document.querySelector("#marking-result");
+    let currentSubmissionId = null;
+    let currentMarkingRunId = null;
+    let selectedPaperHasRubric = false;
+    let markingRequestActive = false;
+    let currentMarkingInputs = null;
+
+    function addText(parent, tag, text, className) {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        if (className) element.className = className;
+        parent.append(element);
+        return element;
+    }
+
+    async function getJson(url, options = {}) {
+        const response = await fetch(url, { cache: "no-store", ...options });
+        if (!response.ok) {
+            let detail = `Request failed (HTTP ${response.status}).`;
+            try {
+                const problem = await response.json();
+                detail = problem.detail || problem.message || detail;
+            } catch (error) {
+                // Some security errors return plain text instead of JSON.
+            }
+            throw new Error(detail);
+        }
+        return response.json();
+    }
+
+    async function loadSubmissions() {
+        try {
+            const submissions = await getJson("/api/transcriptions/submissions");
+            submissionsElement.replaceChildren();
+            if (submissions.length === 0) {
+                submissionsElement.textContent = "No answer scripts have been submitted yet.";
+                return;
+            }
+            for (const submission of submissions) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "submission-choice";
+                button.dataset.submissionId = submission.submissionId;
+                button.setAttribute("aria-current", "false");
+                addText(button, "span", `Submission ${submission.submissionId}`);
+                addText(button, "small", `${submission.pageCount} ${submission.pageCount === 1 ? "page" : "pages"}`);
+                button.addEventListener("click", () => openSubmission(submission.submissionId));
+                submissionsElement.append(button);
+            }
+        } catch (error) {
+            submissionsElement.textContent = `Could not load submissions. ${error.message}`;
+        }
+    }
+
+    async function openSubmission(submissionId) {
+        currentSubmissionId = submissionId;
+        document.querySelectorAll(".submission-choice").forEach(button => {
+            button.setAttribute("aria-current", button.dataset.submissionId === submissionId ? "true" : "false");
+        });
+        messageElement.hidden = false;
+        messageElement.textContent = "Loading submission…";
+        reviewContent.hidden = true;
+        try {
+            const [submission, markingInputs, latestMarking, markingRuns] = await Promise.all([
+                getJson(`/api/transcriptions/submissions/${submissionId}`),
+                getJson(`/api/marking/submissions/${submissionId}/inputs`),
+                getJson(`/api/marking/submissions/${submissionId}/latest`),
+                getJson(`/api/marking/submissions/${submissionId}/runs`)
+            ]);
+            document.querySelector("#submission-title").textContent = `Submission ${submission.submissionId}`;
+            const pagesElement = document.querySelector("#pages");
+            pagesElement.replaceChildren();
+            for (const page of submission.pages) {
+                const pageElement = document.createElement("article");
+                pageElement.className = "page";
+                addText(pageElement, "h3", `Page ${page.pageNumber}`);
+                const image = document.createElement("img");
+                image.src = page.imageUrl;
+                image.alt = `Submitted page ${page.pageNumber}`;
+                pageElement.append(image);
+                pagesElement.append(pageElement);
+            }
+            messageElement.hidden = true;
+            reviewContent.hidden = false;
+            renderHistory(submission.runs, submission.latestRun?.id);
+            renderRun(submission.latestRun);
+            renderMarkingInputs(markingInputs);
+            renderMarkingHistory(markingRuns, latestMarking.latestRun?.id);
+            renderMarkingResult(latestMarking.latestRun);
+        } catch (error) {
+            messageElement.hidden = false;
+            messageElement.textContent = `Could not open this submission. ${error.message}`;
+        }
+    }
+
+    function renderMarkingInputs(inputs) {
+        currentMarkingInputs = inputs;
+        markingInputsElement.hidden = false;
+        markingReadingElement.replaceChildren();
+        markingPaperElement.replaceChildren();
+        markButton.hidden = true;
+        markButton.disabled = true;
+        markWithRubricButton.hidden = true;
+        markWithRubricButton.disabled = true;
+        selectedPaperHasRubric = false;
+        markingRubricStatus.className = "subtle";
+        markingRubricStatus.textContent = "";
+        markingStatus.className = "";
+        markingStatus.textContent = "";
+        markingResult.hidden = true;
+        markingResult.replaceChildren();
+
+        addText(markingReadingElement, "h3", "Latest successful reading");
+        if (!inputs.latestReading) {
+            addText(markingReadingElement, "p", "Read the pages first.", "subtle");
+        } else {
+            const reading = inputs.latestReading;
+            addText(markingReadingElement, "p",
+                `${reading.provider} · ${reading.modelName} · ${new Date(reading.startedAt).toLocaleString()}`,
+                "subtle");
+            if (reading.answers.length === 0) {
+                addText(markingReadingElement, "p", "The reading contains no answers.", "subtle");
+            } else {
+                for (const answer of reading.answers) {
+                    const item = document.createElement("article");
+                    item.className = "marking-answer";
+                    addText(item, "h3", answer.q);
+                    addText(item, "p", answer.text);
+                    markingReadingElement.append(item);
+                }
+            }
+        }
+
+        addText(markingPaperElement, "h3", "Exam question paper");
+        addText(markingPaperElement, "p",
+            `${inputs.examName} · ${inputs.subjectName} · ${inputs.branch} year ${inputs.year}`, "subtle");
+
+        const currentPaper = inputs.currentPaper;
+        const legacyPapers = inputs.legacyPapers || [];
+        if (inputs.legacyPlaceholder) {
+            if (legacyPapers.length === 0) {
+                addText(markingPaperElement, "p", "Upload a paper to use with this older submission.", "subtle");
+                return;
+            }
+            const label = document.createElement("label");
+            label.htmlFor = "question-paper-select";
+            label.textContent = "Choose the paper for this older submission";
+            const select = document.createElement("select");
+            select.id = "question-paper-select";
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Choose a question paper";
+            select.append(placeholder);
+            for (const paper of legacyPapers) {
+                const option = document.createElement("option");
+                option.value = paper.id;
+                option.textContent = `${paper.displayFilename}${paper.replaced ? " · Replaced" : " · Current"} · ${new Date(paper.uploadedAt).toLocaleString()}`;
+                select.append(option);
+            }
+            markingPaperElement.append(label, select);
+            if (inputs.latestReading) {
+                markButton.hidden = false;
+                markWithRubricButton.hidden = false;
+                select.addEventListener("change", () => updateMarkingButtons(select));
+            }
+            selectedPaperHasRubric = inputs.rubricSaved;
+            markingRubricStatus.textContent = selectedPaperHasRubric
+                ? "A saved rubric is available for the placeholder exam."
+                : "No rubric is saved for the placeholder exam.";
+            updateMarkingButtons(select);
+            return;
+        }
+
+        if (!currentPaper) {
+            addText(markingPaperElement, "p", "Upload a question paper for this exam first.", "subtle");
+            return;
+        }
+        addText(markingPaperElement, "p", `Current paper: ${currentPaper.displayFilename}`, "subtle");
+        selectedPaperHasRubric = inputs.rubricSaved;
+        markingRubricStatus.textContent = selectedPaperHasRubric
+            ? "A saved rubric is available for this exam."
+            : "No rubric is saved for this exam.";
+        if (inputs.latestReading) {
+            markButton.hidden = false;
+            markWithRubricButton.hidden = false;
+        }
+        updateMarkingButtons(null);
+    }
+
+    function updateMarkingButtons(select) {
+        const selectedPaperId = currentMarkingInputs?.legacyPlaceholder
+            ? select?.value
+            : currentMarkingInputs?.currentPaper?.id;
+        markButton.disabled = !selectedPaperId || markingRequestActive;
+        markWithRubricButton.disabled = !selectedPaperId || !selectedPaperHasRubric || markingRequestActive;
+    }
+
+    function renderHistory(runs, latestRunId) {
+        runHistoryElement.replaceChildren();
+        const previousRuns = runs.filter(run => run.id !== latestRunId);
+        runHistoryBox.hidden = previousRuns.length === 0;
+        for (const run of previousRuns) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "run-choice";
+            button.dataset.runId = run.id;
+            button.setAttribute("aria-current", "false");
+            addText(button, "span", `${run.provider} · ${run.modelName}`);
+            addText(button, "small", `${new Date(run.startedAt).toLocaleString()} · ${run.succeeded ? "Succeeded" : "Failed"}`);
+            button.addEventListener("click", () => openRun(run.id));
+            runHistoryElement.append(button);
+        }
+    }
+
+    async function openRun(runId) {
+        try {
+            const run = await getJson(`/api/transcriptions/submissions/${currentSubmissionId}/runs/${runId}`);
+            renderRun(run);
+        } catch (error) {
+            runStatus.className = "error";
+            runStatus.textContent = `Could not open this saved reading. ${error.message}`;
+        }
+    }
+
+    function renderRun(run) {
+        answersElement.replaceChildren();
+        runStatus.className = "";
+        document.querySelectorAll(".run-choice").forEach(button => {
+            button.setAttribute("aria-current", button.dataset.runId === run?.id ? "true" : "false");
+        });
+        if (!run) {
+            runStatus.textContent = "No reading run yet.";
+            return;
+        }
+        runStatus.textContent = `${run.provider} · ${run.modelName} · started ${new Date(run.startedAt).toLocaleString()}`;
+        if (!run.succeeded) {
+            runStatus.classList.add("error");
+            runStatus.textContent += ` — ${run.errorMessage || "The model could not read these pages. You can try again."}`;
+            return;
+        }
+
+        runStatus.classList.add("success");
+        if (run.answers.length === 0) {
+            addText(answersElement, "p", "The model returned no answers.", "subtle");
+            return;
+        }
+        const grouped = new Map();
+        for (const answer of run.answers) {
+            grouped.set(answer.q, [...(grouped.get(answer.q) || []), answer.text]);
+        }
+        for (const [question, texts] of grouped) {
+            const section = document.createElement("article");
+            section.className = "answer";
+            addText(section, "h3", question);
+            addText(section, "p", texts.join("\n"));
+            answersElement.append(section);
+        }
+    }
+
+    function renderMarkingResult(run) {
+        markingResult.replaceChildren();
+        currentMarkingRunId = run?.id || null;
+        updateMarkingHistorySelection();
+        markingStatus.className = "";
+        if (!run) {
+            markingStatus.textContent = "No marking run yet.";
+            markingResult.hidden = true;
+            return;
+        }
+
+        markingStatus.textContent = `${markingKindLabel(run.runType)} · ${run.provider} · ${run.modelName} · started ${new Date(run.startedAt).toLocaleString()}`;
+        if (!run.succeeded) {
+            markingStatus.classList.add("error");
+            markingStatus.textContent += ` — ${run.errorMessage || "The model could not mark these answers. You can try again."}`;
+            markingResult.hidden = true;
+            return;
+        }
+
+        markingStatus.classList.add("success");
+        markingStatus.textContent += " — Marking complete.";
+        if (run.runType === "rubric") {
+            if (run.questionsWithoutRubric.length > 0) {
+                addText(markingResult, "p",
+                    `No rubric was saved for: ${run.questionsWithoutRubric.join(", ")}. These questions were marked from their wording and marks.`,
+                    "subtle");
+            }
+            const rubricDetails = document.createElement("details");
+            addText(rubricDetails, "summary", "Rubric text used in this run");
+            addText(rubricDetails, "pre", run.rubricText || "");
+            markingResult.append(rubricDetails);
+        }
+        const heading = addText(markingResult, "h3", "Marks by question");
+        heading.id = "marking-table-title";
+        if (run.marks.length === 0) {
+            addText(markingResult, "p", "The model returned no marked questions.", "subtle");
+        } else {
+            const table = document.createElement("table");
+            table.setAttribute("aria-labelledby", heading.id);
+            const head = document.createElement("thead");
+            const headerRow = document.createElement("tr");
+            for (const title of ["Question", "Maximum marks", "Marks awarded", "Explanation"]) {
+                addText(headerRow, "th", title, "");
+            }
+            head.append(headerRow);
+            const body = document.createElement("tbody");
+            for (const mark of run.marks) {
+                const row = document.createElement("tr");
+                if (mark.marksAwarded > mark.maxMarks) row.className = "over-maximum";
+                addText(row, "td", mark.q);
+                addText(row, "td", String(mark.maxMarks));
+                addText(row, "td", String(mark.marksAwarded));
+                addText(row, "td", mark.explanation);
+                body.append(row);
+            }
+            table.append(head, body);
+            markingResult.append(table);
+        }
+        addText(markingResult, "p", `Total awarded (computed): ${run.totalAwarded}`);
+        if (run.unassigned.length > 0) {
+            const unassigned = document.createElement("section");
+            unassigned.className = "unassigned";
+            addText(unassigned, "h3", "Unassigned answers");
+            const list = document.createElement("ul");
+            for (const answer of run.unassigned) addText(list, "li", answer);
+            unassigned.append(list);
+            markingResult.append(unassigned);
+        }
+        markingResult.hidden = false;
+    }
+
+    function renderMarkingHistory(runs, latestRunId) {
+        markingHistory.replaceChildren();
+        const previousRuns = runs.filter(run => run.id !== latestRunId);
+        markingHistoryBox.hidden = previousRuns.length === 0;
+        for (const run of previousRuns) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "marking-run-choice";
+            button.dataset.runId = run.id;
+            button.setAttribute("aria-current", "false");
+            addText(button, "span", `${markingKindLabel(run.runType)} · ${run.provider} · ${run.modelName}`);
+            addText(button, "small", `${new Date(run.startedAt).toLocaleString()} · ${run.succeeded ? "Succeeded" : "Failed"}`);
+            button.addEventListener("click", () => openMarkingRun(run.id));
+            markingHistory.append(button);
+        }
+        updateMarkingHistorySelection();
+    }
+
+    function markingKindLabel(runType) {
+        return runType === "rubric" ? "Rubric" : "No rubric";
+    }
+
+    function updateMarkingHistorySelection() {
+        document.querySelectorAll(".marking-run-choice").forEach(button => {
+            button.setAttribute("aria-current", button.dataset.runId === currentMarkingRunId ? "true" : "false");
+        });
+    }
+
+    async function openMarkingRun(runId) {
+        try {
+            const run = await getJson(`/api/marking/submissions/${currentSubmissionId}/runs/${runId}`);
+            renderMarkingResult(run);
+        } catch (error) {
+            markingStatus.className = "error";
+            markingStatus.textContent = `Could not open this saved marking run. ${error.message}`;
+        }
+    }
+
+    runButton.addEventListener("click", async () => {
+        if (!currentSubmissionId) return;
+        runButton.disabled = true;
+        runStatus.className = "";
+        runStatus.textContent = "Sending the pages together to the selected model…";
+        answersElement.replaceChildren();
+        try {
+            const csrf = await getJson("/csrf");
+            const run = await getJson(`/api/transcriptions/submissions/${currentSubmissionId}/read`, {
+                method: "POST",
+                headers: { [csrf.headerName]: csrf.token }
+            });
+            renderRun(run);
+            await openSubmission(currentSubmissionId);
+        } catch (error) {
+            runStatus.className = "error";
+            runStatus.textContent = `Could not start the reading request. ${error.message}`;
+        } finally {
+            runButton.disabled = false;
+        }
+    });
+
+    async function submitMarking(withRubric) {
+        if (!currentSubmissionId) return;
+        const paperSelect = document.querySelector("#question-paper-select");
+        const questionPaperId = currentMarkingInputs?.legacyPlaceholder ? paperSelect?.value : null;
+        if ((currentMarkingInputs?.legacyPlaceholder && !questionPaperId)
+                || (!currentMarkingInputs?.legacyPlaceholder && !currentMarkingInputs?.currentPaper)
+                || (withRubric && !selectedPaperHasRubric)) return;
+        markingRequestActive = true;
+        updateMarkingButtons(paperSelect);
+        markingStatus.className = "";
+        markingStatus.textContent = withRubric
+            ? "Sending the answers, rubric, and question paper to the selected model…"
+            : "Sending the answers and question paper to the selected model…";
+        markingResult.hidden = true;
+        try {
+            const csrf = await getJson("/csrf");
+            const endpoint = withRubric ? "rubric-runs" : "runs";
+            const run = await getJson(`/api/marking/submissions/${currentSubmissionId}/${endpoint}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    [csrf.headerName]: csrf.token
+                },
+                body: JSON.stringify({ questionPaperId })
+            });
+            renderMarkingResult(run);
+            try {
+                const runs = await getJson(`/api/marking/submissions/${currentSubmissionId}/runs`);
+                renderMarkingHistory(runs, run.id);
+            } catch (error) {
+                // The saved result remains visible if refreshing its history fails.
+            }
+        } catch (error) {
+            markingStatus.className = "error";
+            markingStatus.textContent = `Could not start the marking request. ${error.message}`;
+        } finally {
+            markingRequestActive = false;
+            updateMarkingButtons(paperSelect);
+        }
+    }
+
+    markButton.addEventListener("click", () => submitMarking(false));
+    markWithRubricButton.addEventListener("click", () => submitMarking(true));
+
+    loadSubmissions();
+</script>
+</body>
+</html>

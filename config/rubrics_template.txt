@@ -1,0 +1,68 @@
+# Rubric template: Fundamentals of Web Technology (25BACSETC02), Mid Term Test 1
+# Lines starting with # are ignored. Replace each placeholder line with your criteria.
+# One criterion per line:  - what the answer must show: marks
+# The criteria marks of a question should add up to its marks.
+
+# 1a. Define the World Wide Web.
+Q1a (1 mark)
+- (write the criterion here): (marks)
+
+# 1b. Develop a HTML hyperlink to https://example.com.
+Q1b (1 mark)
+- (write the criterion here): (marks)
+
+# 1c. Distinguish between a web server and an application server.
+Q1c (1 mark)
+- (write the criterion here): (marks)
+
+# 1d. Develop a HTML script for an image element for campus.jpg with alternative text "Campus".
+Q1d (1 mark)
+- (write the criterion here): (marks)
+
+# 1e. Mention the purpose of the alt attribute in an image element.
+Q1e (1 mark)
+- (write the criterion here): (marks)
+
+# 1f. Define Cascading Style Sheets (CSS).
+Q1f (1 mark)
+- (write the criterion here): (marks)
+
+# 1g. Write a CSS declaration that changes text color to red.
+Q1g (1 mark)
+- (write the criterion here): (marks)
+
+# 1h. Identify the three methods of applying CSS to a webpage.
+Q1h (1 mark)
+- (write the criterion here): (marks)
+
+# 1i. Construct a CSS rule that sets all paragraph text to 16px.
+Q1i (1 mark)
+- (write the criterion here): (marks)
+
+# 1j. Mention the purpose of the CSS box model.
+Q1j (1 mark)
+- (write the criterion here): (marks)
+
+# 2. Analyze the client/server request-response cycle using a neat labelled diagram.
+Q2 (10 marks)
+- (write the criterion here): (marks)
+
+# 3. Compare web servers and application servers with suitable examples and use cases.
+Q3 (10 marks)
+- (write the criterion here): (marks)
+
+# 4. HTML5 student registration form (fields, input types, labels, department dropdown, Submit and Reset, structural elements).
+Q4 (10 marks)
+- (write the criterion here): (marks)
+
+# 5. Analyze CSS rule syntax by identifying selectors, properties and values in suitable examples.
+Q5 (10 marks)
+- (write the criterion here): (marks)
+
+# 6. Contrast inline, internal and external CSS in terms of usage, maintainability and reuse.
+Q6 (10 marks)
+- (write the criterion here): (marks)
+
+# 7. Student profile card in HTML and CSS (border, rounded corners, padding, margin, background color, text shadow).
+Q7 (10 marks)
+- (write the criterion here): (marks)

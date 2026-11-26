@@ -1,0 +1,8 @@
+Each image is ONE page of a handwritten answer script, and the images come in page order.
+Transcribe only the main page that fills the image. Ignore any part of a neighbouring page visible at an edge, even if it is readable.
+Transcribe VERBATIM exactly what the student wrote. Do not correct spelling, grammar or code errors.
+Use as the question number only a number the student wrote on THIS page at the start of an answer (for example 1a, 2, 4). Never take a number from the edge of a neighbouring page.
+If a page continues an answer from an earlier page and has no question number, keep it under the same question number as the last answer on the previous page. If there is no earlier page, use "unknown". Never guess.
+Write [illegible] for unreadable text.
+Describe each diagram as [DIAGRAM: labelled parts and flow].
+Return only JSON: {"answers":[{"q":"1a","text":"..."}]}

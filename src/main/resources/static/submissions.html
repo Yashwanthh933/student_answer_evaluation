@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Submitted scripts — Answer Script App</title>
+    <style>
+        * { box-sizing: border-box; }
+        :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #17212b; background: #f3f6f8; }
+        body { margin: 0; padding: 1.5rem 1rem; }
+        main { width: min(80rem, 100%); margin: 0 auto; }
+        header, section { margin-bottom: 1rem; padding: 1.5rem; border: 1px solid #dbe3e8; border-radius: 1rem; background: #fff; box-shadow: 0 1rem 3rem #17212b0a; }
+        .eyebrow { margin: 0; color: #526575; font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        h1 { margin: .4rem 0; font-size: 1.8rem; }
+        h2 { margin-top: 0; font-size: 1.25rem; }
+        p, small { color: #526575; line-height: 1.5; }
+        a { color: #1459a6; }
+        nav { margin-top: 1rem; }
+        form { display: grid; grid-template-columns: repeat(4, minmax(9rem, 1fr)); gap: .8rem; align-items: end; }
+        label { display: grid; gap: .3rem; font-weight: 600; }
+        select, button { width: 100%; min-height: 2.5rem; padding: .5rem; font: inherit; }
+        button { border: 0; border-radius: .4rem; background: #1459a6; color: white; font-weight: 650; cursor: pointer; }
+        button.secondary { border: 1px solid #cbd5dc; background: white; color: #17212b; }
+        .actions { display: flex; gap: .5rem; }
+        #list-status { min-height: 1.4rem; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th, td { padding: .75rem .6rem; border-top: 1px solid #dbe3e8; vertical-align: top; }
+        th { color: #526575; font-size: .85rem; }
+        td:first-child { min-width: 12rem; overflow-wrap: anywhere; }
+        .page-list { display: grid; gap: 1rem; padding-left: 1.5rem; }
+        .page-preview { display: block; max-width: min(100%, 24rem); max-height: 24rem; margin-top: .5rem; border: 1px solid #dbe3e8; border-radius: .25rem; background: #f3f6f8; object-fit: contain; }
+        .empty, .error { color: #b42318; }
+        @media (max-width: 56rem) { form { grid-template-columns: repeat(2, minmax(9rem, 1fr)); } }
+        @media (max-width: 34rem) { header, section { padding: 1rem; } form { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <p class="eyebrow">Submitted scripts</p>
+        <h1>Browse submissions</h1>
+        <p>Filter by exam, subject, branch, and year. The selected filters combine.</p>
+        <nav><a href="/browse.html">Browse by branch and year</a> · <a href="/change-password.html">Change password</a> · <a href="/">Home</a></nav>
+    </header>
+    <section>
+        <h2>Filters</h2>
+        <form id="filters">
+            <label>Exam<select id="exam-filter" name="examId"><option value="">All exams</option></select></label>
+            <label>Subject<select id="subject-filter" name="subject"><option value="">All subjects</option></select></label>
+            <label>Branch<select id="branch-filter" name="branch"><option value="">All branches</option></select></label>
+            <label>Year<select id="year-filter" name="year"><option value="">All years</option></select></label>
+            <div class="actions"><button type="submit">Apply filters</button><button class="secondary" id="clear-filters" type="button">Clear</button></div>
+        </form>
+    </section>
+    <section>
+        <h2>Submissions</h2>
+        <p id="list-status" role="status" aria-live="polite">Loading submissions…</p>
+        <div class="table-wrap">
+            <table>
+                <thead><tr>
+                    <th>Submission number</th><th>Exam</th><th>Subject</th><th>Branch</th><th>Year</th>
+                    <th>Scanner</th><th>Pages</th><th>Submitted</th><th id="pages-heading" hidden>Page images</th>
+                </tr></thead>
+                <tbody id="submission-rows"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<script>
+    const filterForm = document.querySelector("#filters");
+    const status = document.querySelector("#list-status");
+    const rowsElement = document.querySelector("#submission-rows");
+    const controls = {
+        examId: document.querySelector("#exam-filter"),
+        subject: document.querySelector("#subject-filter"),
+        branch: document.querySelector("#branch-filter"),
+        year: document.querySelector("#year-filter")
+    };
+
+    async function request(url) {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Could not load submissions (HTTP ${response.status}).`);
+        return response.json();
+    }
+
+    function fillSelect(select, values, labelForValue, selected) {
+        const first = select.options[0];
+        select.replaceChildren(first);
+        for (const value of values) {
+            const option = document.createElement("option");
+            option.value = String(value.id ?? value);
+            option.textContent = labelForValue(value);
+            option.selected = option.value === selected;
+            select.append(option);
+        }
+    }
+
+    function activeFilters() {
+        const query = new URLSearchParams();
+        for (const [name, control] of Object.entries(controls)) {
+            if (control.value) query.set(name, control.value);
+        }
+        return query;
+    }
+
+    function cell(row, value) {
+        const td = document.createElement("td");
+        td.textContent = value;
+        row.append(td);
+        return td;
+    }
+
+    function renderPageDetails(container, pages) {
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.textContent = "View pages";
+        details.append(summary);
+        const list = document.createElement("ol");
+        list.className = "page-list";
+        for (const page of pages) {
+            const item = document.createElement("li");
+            const link = document.createElement("a");
+            link.href = page.imageUrl;
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = `Open page ${page.pageNumber}`;
+            const image = document.createElement("img");
+            image.className = "page-preview";
+            image.src = page.imageUrl;
+            image.alt = `Answer script page ${page.pageNumber}`;
+            image.loading = "lazy";
+            item.append(link, image);
+            list.append(item);
+        }
+        details.append(list);
+        container.append(details);
+    }
+
+    async function loadRows() {
+        rowsElement.replaceChildren();
+        status.className = "";
+        status.textContent = "Loading submissions…";
+        try {
+            const query = activeFilters();
+            const url = "/api/submission-browser/submissions" + (query.size ? `?${query}` : "");
+            const result = await request(url);
+            document.querySelector("#pages-heading").hidden = !result.scanner;
+            let pagesBySubmission = new Map();
+            if (result.scanner) {
+                const owned = await request("/api/submissions");
+                pagesBySubmission = new Map(owned.map(item => [item.submissionId, item.pages]));
+            }
+
+            if (!result.submissions.length) {
+                status.textContent = "No submissions match these filters.";
+                return;
+            }
+            status.textContent = `${result.submissions.length} submission${result.submissions.length === 1 ? "" : "s"}.`;
+            for (const item of result.submissions) {
+                const row = document.createElement("tr");
+                cell(row, `Submission ${item.submissionId}`);
+                cell(row, item.examName);
+                cell(row, item.subjectName);
+                cell(row, item.branch);
+                cell(row, String(item.year));
+                cell(row, item.scannerName);
+                cell(row, String(item.pageCount));
+                cell(row, new Date(item.submittedAt).toLocaleString());
+                if (result.scanner) {
+                    const pageCell = document.createElement("td");
+                    renderPageDetails(pageCell, pagesBySubmission.get(item.submissionId) ?? []);
+                    row.append(pageCell);
+                }
+                rowsElement.append(row);
+            }
+        } catch (error) {
+            status.textContent = error.message;
+            status.className = "error";
+        }
+    }
+
+    async function loadFilters() {
+        const options = await request("/api/submission-browser/filters");
+        const initial = new URLSearchParams(location.search);
+        fillSelect(controls.examId, options.exams,
+            exam => `${exam.name} · ${exam.subjectName} · ${exam.branch} year ${exam.year}`,
+            initial.get("examId") ?? "");
+        fillSelect(controls.subject, options.subjects, value => value, initial.get("subject") ?? "");
+        fillSelect(controls.branch, options.branches, value => value, initial.get("branch") ?? "");
+        fillSelect(controls.year, options.years, value => String(value), initial.get("year") ?? "");
+    }
+
+    filterForm.addEventListener("submit", event => {
+        event.preventDefault();
+        const query = activeFilters();
+        history.replaceState(null, "", query.size ? `/submissions.html?${query}` : "/submissions.html");
+        loadRows();
+    });
+
+    document.querySelector("#clear-filters").addEventListener("click", () => {
+        filterForm.reset();
+        history.replaceState(null, "", "/submissions.html");
+        loadRows();
+    });
+
+    loadFilters().then(loadRows).catch(error => {
+        status.textContent = error.message;
+        status.className = "error";
+    });
+</script>
+</body>
+</html>

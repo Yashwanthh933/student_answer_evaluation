@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>User accounts — Answer Script App</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #17212b;
+            background: #f3f6f8;
+        }
+        body { margin: 0; padding: 1.5rem 1rem; }
+        main { width: min(76rem, 100% - 2rem); margin: 0 auto; }
+        header, section {
+            margin-bottom: 1rem;
+            padding: 1.5rem;
+            border: 1px solid #dbe3e8;
+            border-radius: 1rem;
+            background: #fff;
+            box-shadow: 0 1rem 3rem #17212b0a;
+        }
+        .eyebrow { margin: 0; color: #526575; font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        h1 { margin: .4rem 0; font-size: 1.8rem; }
+        h2 { margin-top: 0; font-size: 1.25rem; }
+        p, small { color: #526575; line-height: 1.5; }
+        a { color: #1459a6; }
+        nav { margin-top: 1rem; }
+        label { display: block; margin: .8rem 0 .3rem; font-weight: 600; }
+        input, select { box-sizing: border-box; width: min(28rem, 100%); padding: .6rem; font: inherit; }
+        button { padding: .55rem .8rem; border: 0; border-radius: .4rem; background: #1459a6; color: white; font: inherit; font-weight: 650; cursor: pointer; }
+        button:disabled { opacity: .6; cursor: wait; }
+        #create-user { display: grid; grid-template-columns: repeat(2, minmax(12rem, 1fr)); gap: .2rem 1rem; }
+        #create-user button { justify-self: start; margin-top: .8rem; }
+        #user-list { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: .65rem; border: 1px solid #dbe3e8; text-align: left; vertical-align: top; }
+        th { background: #f3f6f8; }
+        .row-actions { min-width: 16rem; }
+        .reset-form { display: flex; gap: .4rem; margin-top: .5rem; }
+        .reset-form input { width: 12rem; }
+        .error { color: #b42318 !important; }
+        .success { color: #16734a !important; }
+        [hidden] { display: none !important; }
+        @media (max-width: 42rem) {
+            header, section { padding: 1rem; }
+            #create-user { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <p class="eyebrow">Super Admin · Phase 18</p>
+        <h1>User accounts</h1>
+        <p>Create and manage accounts. New and reset passwords are temporary and must be changed at the next sign-in.</p>
+        <nav><a href="/settings.html">Model settings</a> · <a href="/transcription.html">Read and mark scripts</a> · <a href="/change-password.html">Change password</a> · <a href="/">Home</a></nav>
+    </header>
+    <section aria-labelledby="create-title">
+        <h2 id="create-title">Create a user</h2>
+        <form id="create-user">
+            <div>
+                <label for="username">Username</label>
+                <input id="username" name="username" maxlength="100" autocomplete="off" required>
+            </div>
+            <div>
+                <label for="display-name">Display name</label>
+                <input id="display-name" name="displayName" maxlength="200" required>
+            </div>
+            <div>
+                <label for="role">Role</label>
+                <select id="role" name="role" required>
+                    <option value="SUPER_ADMIN">Super Admin</option>
+                    <option value="EXAM_CONTROLLER">Exam Controller</option>
+                    <option value="SCANNER" selected>Scanner</option>
+                </select>
+            </div>
+            <div>
+                <label for="initial-password">Initial password</label>
+                <input id="initial-password" name="initialPassword" type="password" minlength="10" autocomplete="new-password" required>
+            </div>
+            <button type="submit">Create user</button>
+        </form>
+        <p id="create-status" role="status" aria-live="polite"></p>
+    </section>
+    <section aria-labelledby="users-title">
+        <h2 id="users-title">Users</h2>
+        <p id="list-status" role="status" aria-live="polite">Loading users…</p>
+        <div id="user-list"></div>
+    </section>
+</main>
+<script>
+    const createForm = document.querySelector("#create-user");
+    const createStatus = document.querySelector("#create-status");
+    const listStatus = document.querySelector("#list-status");
+    const userList = document.querySelector("#user-list");
+
+    function addText(parent, tag, text, className) {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        if (className) element.className = className;
+        parent.append(element);
+        return element;
+    }
+
+    async function requestJson(url, options = {}) {
+        const response = await fetch(url, { cache: "no-store", ...options });
+        if (!response.ok) {
+            let detail = `Request failed (HTTP ${response.status}).`;
+            try {
+                const problem = await response.json();
+                detail = problem.detail || problem.message || detail;
+            } catch (error) {
+                // Some security responses are plain text.
+            }
+            throw new Error(detail);
+        }
+        return response.status === 204 ? null : response.json();
+    }
+
+    async function postJson(url, body) {
+        const csrf = await requestJson("/csrf");
+        return requestJson(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", [csrf.headerName]: csrf.token },
+            body: JSON.stringify(body)
+        });
+    }
+
+    function displayTime(value) {
+        return value ? new Date(value).toLocaleString() : "Never";
+    }
+
+    function renderUsers(users) {
+        userList.replaceChildren();
+        if (users.length === 0) {
+            listStatus.textContent = "No user accounts found.";
+            return;
+        }
+        listStatus.textContent = `${users.length} user${users.length === 1 ? "" : "s"}.`;
+        const table = document.createElement("table");
+        const head = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+        for (const title of ["Username", "Display name", "Role", "Enabled", "Last login", "Created by", "Actions"]) {
+            addText(headerRow, "th", title);
+        }
+        head.append(headerRow);
+        const body = document.createElement("tbody");
+        for (const user of users) {
+            const row = document.createElement("tr");
+            addText(row, "td", user.username);
+            addText(row, "td", user.displayName);
+            addText(row, "td", user.role.replaceAll("_", " "));
+            addText(row, "td", user.enabled ? "Yes" : "No");
+            addText(row, "td", displayTime(user.lastLoginAt));
+            addText(row, "td", user.createdByUsername || "Development bootstrap");
+
+            const actions = document.createElement("td");
+            actions.className = "row-actions";
+            const enabledButton = addText(actions, "button", user.enabled ? "Disable" : "Enable");
+            enabledButton.type = "button";
+            enabledButton.addEventListener("click", async () => {
+                try {
+                    await postJson("/api/users/enabled", { username: user.username, enabled: !user.enabled });
+                    await loadUsers();
+                } catch (error) {
+                    listStatus.className = "error";
+                    listStatus.textContent = error.message;
+                }
+            });
+
+            const resetForm = document.createElement("form");
+            resetForm.className = "reset-form";
+            const temporaryPassword = document.createElement("input");
+            temporaryPassword.type = "password";
+            temporaryPassword.minLength = 10;
+            temporaryPassword.autocomplete = "new-password";
+            temporaryPassword.placeholder = "Temporary password";
+            temporaryPassword.setAttribute("aria-label", `Temporary password for ${user.username}`);
+            temporaryPassword.required = true;
+            const resetButton = addText(resetForm, "button", "Reset password");
+            resetButton.type = "submit";
+            resetForm.prepend(temporaryPassword);
+            resetForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                try {
+                    await postJson("/api/users/reset-password", {
+                        username: user.username,
+                        temporaryPassword: temporaryPassword.value
+                    });
+                    temporaryPassword.value = "";
+                    await loadUsers();
+                    listStatus.className = "success";
+                    listStatus.textContent = `Password reset for ${user.username}; it must be changed at the next sign-in.`;
+                } catch (error) {
+                    listStatus.className = "error";
+                    listStatus.textContent = error.message;
+                }
+            });
+            actions.append(resetForm);
+            body.append(row);
+            row.append(actions);
+        }
+        table.append(head, body);
+        userList.append(table);
+    }
+
+    async function loadUsers() {
+        try {
+            const users = await requestJson("/api/users");
+            renderUsers(users);
+        } catch (error) {
+            listStatus.className = "error";
+            listStatus.textContent = `Could not load users. ${error.message}`;
+        }
+    }
+
+    createForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        createStatus.className = "";
+        const form = new FormData(createForm);
+        try {
+            const user = await postJson("/api/users", {
+                username: form.get("username"),
+                displayName: form.get("displayName"),
+                role: form.get("role"),
+                initialPassword: form.get("initialPassword")
+            });
+            createForm.reset();
+            createForm.elements.role.value = "SCANNER";
+            createStatus.className = "success";
+            createStatus.textContent = `Created ${user.username}. They must change the initial password at first login.`;
+            await loadUsers();
+        } catch (error) {
+            createStatus.className = "error";
+            createStatus.textContent = error.message;
+        }
+    });
+
+    loadUsers();
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+CREATE TABLE model_settings (
+    id SMALLINT PRIMARY KEY CHECK (id = 1),
+    selected_model_id VARCHAR(120) NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

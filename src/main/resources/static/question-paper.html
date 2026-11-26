@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Exam Controller — Answer Script App</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #17212b;
+            background: #f3f6f8;
+        }
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+        main {
+            width: min(34rem, calc(100% - 3rem));
+            padding: 2rem;
+            border: 1px solid #dbe3e8;
+            border-radius: 1rem;
+            background: #fff;
+            box-shadow: 0 1rem 3rem #17212b12;
+        }
+        .eyebrow {
+            color: #526575;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        h1 { margin: 0.5rem 0; font-size: 1.75rem; }
+        p { color: #526575; line-height: 1.5; }
+        label { display: block; margin: 1.25rem 0 0.5rem; font-weight: 600; }
+        input { display: block; max-width: 100%; margin-bottom: 0.75rem; }
+        button {
+            padding: 0.65rem 1rem;
+            border: 0;
+            border-radius: 0.5rem;
+            color: white;
+            background: #1459a6;
+            font: inherit;
+            font-weight: 600;
+        }
+        button:disabled { background: #9aa9b5; }
+        #upload-status { min-height: 1.5rem; }
+    </style>
+</head>
+<body>
+<main>
+    <p class="eyebrow">Exam Controller and Super Admin · Phase 20</p>
+    <h1>Exam question paper</h1>
+    <p><a href="/exams.html">Manage exams</a> · <a href="/submissions.html">Submissions</a> · <a href="/browse.html">Browse</a> · <a href="/rubric.html">Manage rubrics</a> · <a href="/change-password.html">Change password</a></p>
+    <p>Choose an exam and one PDF file up to 15 MB. A new upload becomes current; the previous PDF remains stored as replaced.</p>
+    <form id="paper-form">
+        <label for="exam-select">Exam</label>
+        <select id="exam-select" required></select>
+        <p id="paper-history" role="status"></p>
+        <label for="paper-file">Question paper PDF</label>
+        <input id="paper-file" type="file" accept="application/pdf,.pdf" required>
+        <button id="upload-button" type="submit">Upload PDF</button>
+    </form>
+    <p id="upload-status" role="status" aria-live="polite"></p>
+</main>
+<script>
+    const paperForm = document.querySelector("#paper-form");
+    const examSelect = document.querySelector("#exam-select");
+    const paperFile = document.querySelector("#paper-file");
+    const uploadButton = document.querySelector("#upload-button");
+    const status = document.querySelector("#upload-status");
+
+    async function loadExams() {
+        try {
+            const response = await fetch("/api/question-papers/exams", { cache: "no-store" });
+            if (!response.ok) throw new Error(`Could not load exams (HTTP ${response.status}).`);
+            const exams = await response.json();
+            examSelect.replaceChildren();
+            const choose = document.createElement("option");
+            choose.value = "";
+            choose.textContent = "Choose an exam";
+            examSelect.append(choose);
+            for (const exam of exams) {
+                const option = document.createElement("option");
+                option.value = exam.id;
+                option.textContent = `${exam.name} · ${exam.subjectName} · ${exam.branch} year ${exam.year} · ${exam.status}`;
+                if (exam.name === "Unassigned (before Module 5)") option.disabled = true;
+                examSelect.append(option);
+            }
+            const requestedExam = new URLSearchParams(location.search).get("exam");
+            if (requestedExam && [...examSelect.options].some(option => option.value === requestedExam)) {
+                examSelect.value = requestedExam;
+            }
+            await loadPaperHistory();
+        } catch (error) {
+            status.textContent = error.message;
+            uploadButton.disabled = true;
+        }
+    }
+
+    async function loadPaperHistory() {
+        if (!examSelect.value) {
+            document.querySelector("#paper-history").textContent = "Select an exam to see its current paper and upload history.";
+            return;
+        }
+        try {
+            const response = await fetch(`/api/question-papers/exams/${examSelect.value}`, { cache: "no-store" });
+            if (!response.ok) throw new Error(`Could not load paper history (HTTP ${response.status}).`);
+            const state = await response.json();
+            const history = document.querySelector("#paper-history");
+            history.replaceChildren();
+            const current = state.current
+                ? `Current: ${state.current.displayFilename}`
+                : "No current paper uploaded.";
+            const replaced = state.history.filter(paper => paper.replaced);
+            history.textContent = replaced.length
+                ? `${current} Replaced files kept: ${replaced.map(paper => paper.displayFilename).join(", ")}.`
+                : current;
+        } catch (error) {
+            document.querySelector("#paper-history").textContent = error.message;
+        }
+    }
+
+    examSelect.addEventListener("change", loadPaperHistory);
+    loadExams();
+
+    paperForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const file = paperFile.files[0];
+        if (!examSelect.value) {
+            status.textContent = "Choose an exam before uploading.";
+            return;
+        }
+        if (!file) {
+            status.textContent = "Choose a PDF before uploading.";
+            return;
+        }
+        if (file.size > 15 * 1024 * 1024) {
+            status.textContent = "The PDF must be 15 MB or smaller.";
+            return;
+        }
+
+        uploadButton.disabled = true;
+        status.textContent = "Uploading PDF…";
+        try {
+            const csrfResponse = await fetch("/csrf", { cache: "no-store" });
+            if (!csrfResponse.ok) {
+                throw new Error("Could not prepare the secure upload.");
+            }
+            const csrf = await csrfResponse.json();
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const response = await fetch(`/api/exams/${examSelect.value}/question-papers`, {
+                method: "POST",
+                headers: { [csrf.headerName]: csrf.token },
+                body: formData
+            });
+            const responseText = await response.text();
+            let result = {};
+            try {
+                result = JSON.parse(responseText);
+            } catch (error) {
+                // Keep the HTTP status below if the server returns a non-JSON error page.
+            }
+            if (!response.ok) {
+                const serverMessage = result.detail || result.message || result.error;
+                throw new Error(`${serverMessage || response.statusText} (HTTP ${response.status}).`);
+            }
+            if (!result.paperId) {
+                throw new Error("The server did not return a paper receipt. Sign in again and retry.");
+            }
+            status.textContent = `Question paper stored as the current paper. Paper ID: ${result.paperId}`;
+            paperFile.value = "";
+            await loadPaperHistory();
+        } catch (error) {
+            status.textContent = error.message;
+        } finally {
+            uploadButton.disabled = false;
+        }
+    });
+</script>
+</body>
+</html>

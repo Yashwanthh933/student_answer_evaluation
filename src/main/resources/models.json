@@ -1,0 +1,26 @@
+[
+  {
+    "id": "gpt-6-luna",
+    "provider": "OpenAI",
+    "modelName": "gpt-6-luna",
+    "endpoint": "https://api.openai.com/v1/responses",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "canReadImages": true
+  },
+  {
+    "id": "gemini-3.8-flash",
+    "provider": "Google",
+    "modelName": "gemini-3.8-flash",
+    "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+    "apiKeyEnv": "GEMINI_API_KEY",
+    "canReadImages": true
+  },
+  {
+    "id": "claude-haiku-5-5",
+    "provider": "Anthropic",
+    "modelName": "claude-haiku-5-5",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "apiKeyEnv": "ANTHROPIC_API_KEY",
+    "canReadImages": true
+  }
+]
